@@ -1,14 +1,14 @@
 # Alexa To Excel
 
 Exports data from your Alexa account to an XLSX file. Currently exports **reminders** from all your Echo devices, polling on a schedule so your history keeps growing.
-You could probably automate this using Claude Cowork : https://support.claude.com/en/articles/13854387-schedule-recurring-tasks-in-cowork
-But here is a free standalone version you can run on your own machine, no cloud required.
+
+You could probably automate this using [Claude Cowork](https://support.claude.com/en/articles/13854387-schedule-recurring-tasks-in-cowork) but here is a free standalone version you can run on your own machine, no subscription required.
 
 ---
 
 # How to run on startup
 
-1. Find the application you want to launch.
+1. Download AlexaToExcel.exe from the [releases](https://github.com/tetj/AlexaToExcel/releases/)
 2. Right-click on AlexaToExcel.exe and select Copy.
 3. Press Windows Key + R to open the Run dialog.
 4. Type shell:startup and click OK.
