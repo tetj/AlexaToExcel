@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "AlexaToExcel": {
+      "commandName": "Project",
+      "commandLineArgs": "-c ca -p 1"
+    }
+  }
+}
