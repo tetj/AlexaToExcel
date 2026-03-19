@@ -5,6 +5,22 @@ Exports data from your Alexa account to an XLSX file. Currently exports **remind
 You could probably automate this using [Claude Cowork](https://support.claude.com/en/articles/13854387-schedule-recurring-tasks-in-cowork) but here is a free standalone version you can run on your own machine, no subscription required.
 
 ---
+# Why use this ?
+
+Alexa does not keep the full history, you can only see the last few reminders but I often need the full list to see what I did and when.
+
+# How to use
+
+First, see section [How to get your cookie](#how-to-get-your-cookie) below
+```
+# Run once for a US account
+AlexaToExcel.exe --country us --poll-interval 0
+or AlexaToExcel.exe -c us -p 0
+
+# Poll every 30 minutes for a UK account
+AlexaToExcel.exe --country uk --poll-interval 30
+or AlexaToExcel.exe -c uk -p 30
+```
 
 # How to run on startup
 
@@ -13,17 +29,6 @@ You could probably automate this using [Claude Cowork](https://support.claude.co
 3. Press Windows Key + R to open the Run dialog.
 4. Type shell:startup and click OK.
 5. In the folder that opens, right-click and select Paste.
-
----
-
-## Quick Start
-
-```
-cd AlexaToExcel
-dotnet run
-```
-
-On first run it walks you through the cookie setup interactively.
 
 ---
 
@@ -55,21 +60,9 @@ Arguments override the corresponding values in `config.json` for that run only â
 | `mx` | amazon.com.mx (Mexico) |
 | `br` | amazon.com.br (Brazil) |
 
-**Examples:**
-
-```
-# Run once for a US account
-AlexaToExcel.exe --country us --poll-interval 0
-AlexaToExcel.exe -c us -p 0
-
-# Poll every 30 minutes for a UK account
-AlexaToExcel.exe --country uk --poll-interval 30
-AlexaToExcel.exe -c uk -p 30
-```
-
 ---
 
-## Getting Your Cookie â€” Precise Steps
+## How to get your cookie
 
 The most common cause of 401 errors is copying the cookie from the wrong place. Follow these steps **exactly**:
 
