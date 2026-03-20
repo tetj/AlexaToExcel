@@ -105,8 +105,6 @@ Open `config.json` and paste the value as the `CookieString`:
 }
 ```
 
-> ⚠️ If you used **Copy as cURL (cmd)**, strip all `^` characters from the pasted value before saving — they are Windows escape characters that break authentication.
-
 ### Step 6 — Verify csrf is present
 
 Your cookie string **must contain `csrf=`** (a number, like `csrf=1465446206`).  
