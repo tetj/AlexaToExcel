@@ -2,7 +2,7 @@
   "profiles": {
     "AlexaToExcel": {
       "commandName": "Project",
-      "commandLineArgs": "-c ca -p 1"
+      "commandLineArgs": " -c ca -p 60 --debug"
     }
   }
 }

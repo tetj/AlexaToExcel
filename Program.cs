@@ -45,7 +45,32 @@ namespace AlexaToExcel
 
             var service = new AlexaReminderService(config, debug);
 
-            await RunSync(service, config);
+            try
+            {
+                await RunSync(service, config);
+            }
+            catch (AuthException)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Your session cookie has expired. Please provide a fresh one.");
+                Console.WriteLine();
+                config.CookieString = PromptForCookie(config);
+                config.Save();
+                Console.WriteLine("Cookie saved to config.json.");
+                Console.WriteLine();
+                service = new AlexaReminderService(config, debug);
+
+                try
+                {
+                    await RunSync(service, config);
+                }
+                catch (AuthException ex)
+                {
+                    Console.WriteLine($"  AUTH ERROR after retry: {ex.Message}");
+                    Console.WriteLine("The new cookie is also invalid. Please restart and try again.");
+                    return;
+                }
+            }
 
             if (!debug && config.PollIntervalMinutes > 0)
             {
@@ -53,7 +78,21 @@ namespace AlexaToExcel
                 while (true)
                 {
                     await Task.Delay(TimeSpan.FromMinutes(config.PollIntervalMinutes));
-                    await RunSync(service, config);
+                    try
+                    {
+                        await RunSync(service, config);
+                    }
+                    catch (AuthException)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine("Session cookie expired during polling. Please provide a fresh one.");
+                        Console.WriteLine();
+                        config.CookieString = PromptForCookie(config);
+                        config.Save();
+                        Console.WriteLine("Cookie saved to config.json.");
+                        Console.WriteLine();
+                        service = new AlexaReminderService(config, debug);
+                    }
                 }
             }
 
@@ -104,15 +143,7 @@ namespace AlexaToExcel
             catch (AuthException ex)
             {
                 Console.WriteLine($"  AUTH ERROR: {ex.Message}");
-                Console.WriteLine();
-                Console.WriteLine("  ── How to fix ──────────────────────────────────────────");
-                Console.WriteLine("  Your cookie has expired or is incomplete. To get a fresh one:");
-                Console.WriteLine($"  1. Open Chrome → {AlexaReminderService.GetAlexaHost(config.BaseUrl)}/api/devices-v2/device?raw=false");
-                Console.WriteLine("  2. F12 → Network → refresh → click 'device' request");
-                Console.WriteLine("  3. Request Headers → right-click 'cookie:' value → Copy value");
-                Console.WriteLine("  4. Open config.json and replace the CookieString value");
-                Console.WriteLine("  5. Make sure the string contains 'csrf=' somewhere");
-                Console.WriteLine("  ────────────────────────────────────────────────────────");
+                throw;
             }
             catch (Exception ex)
             {
