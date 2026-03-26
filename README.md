@@ -163,11 +163,11 @@ The same cookie authentication gives access to other Alexa data. Planned candida
 
 To add a preview or export a Google Sheet as HTML using URL modifications, you can replace the /edit portion of the spreadsheet URL with specific parameters. 
 
-**URL Transformation Methods**
+**URL Transformation Methods :** 
 
-1- Preview Mode: Replace /edit with /preview.
-2- HTML View: Replace /edit with /htmlview. 
-3- Direct HTML Export: Replace /edit with /export?format=html. 
+1. Preview Mode: Replace /edit with /preview.
+2. HTML View: Replace /edit with /htmlview. 
+3. Direct HTML Export: Replace /edit with /export?format=html. 
 
 I tested with /preview and I was able to download it as HTML.
 Then using a command prompt :
