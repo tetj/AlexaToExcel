@@ -161,17 +161,17 @@ The same cookie authentication gives access to other Alexa data. Planned candida
 
 # Exporting Google Sheet as CSV from HTML
 
-First get the latest release here : https://github.com/tetj/AlexaToExcel/releases/
-
-Then to export a Google Sheet as HTML, you can replace the **/edit** portion of the spreadsheet URL with specific parameters such as :
+a) To export a Google Sheet as HTML, you can replace the **/edit** portion of the spreadsheet URL with specific parameters such as :
 
 1. Preview Mode: Replace /edit with /preview.
 2. HTML View: Replace /edit with /htmlview. 
 3. Direct HTML Export: Replace /edit with /export?format=html. 
 
-I tested with **/preview** and I was able to download it as HTML using **right-click -> Save As** ...
+b) I tested with **/preview** and I was able to download it as HTML using **right-click -> Save As** ...
 
-Then using a command prompt :
+c) Get the latest release here : https://github.com/tetj/AlexaToExcel/releases/
+
+d) Then using a command prompt :
 
 ```
 AlexaToExcel --html-to-csv "file.html" output.csv
