@@ -169,7 +169,8 @@ To add a preview or export a Google Sheet as HTML using URL modifications, you c
 2. HTML View: Replace /edit with /htmlview. 
 3. Direct HTML Export: Replace /edit with /export?format=html. 
 
-I tested with /preview and I was able to download it as HTML.
+I tested with /preview and I was able to download it as HTML using right-click -> Save As ...
+
 Then using a command prompt :
 
 ```
