@@ -19,6 +19,14 @@ namespace AlexaToExcel
                 return;
             }
 
+            // --html-to-csv <input.html> [output.csv]
+            int htmlIdx = Array.FindIndex(args, a => a.Equals("--html-to-csv", StringComparison.OrdinalIgnoreCase));
+            if (htmlIdx >= 0)
+            {
+                RunHtmlToCsv(args, htmlIdx);
+                return;
+            }
+
             var config = AppConfig.Load();
 
             // --debug flag: dump raw API response and exit
@@ -151,6 +159,42 @@ namespace AlexaToExcel
             }
         }
 
+        static void RunHtmlToCsv(string[] args, int flagIndex)
+        {
+            if (flagIndex + 1 >= args.Length)
+            {
+                Console.WriteLine("Error: --html-to-csv requires an input HTML file path.");
+                Console.WriteLine("Usage: AlexaToExcel --html-to-csv <input.html> [output.csv]");
+                return;
+            }
+
+            string htmlPath = args[flagIndex + 1];
+            string csvPath;
+
+            if (flagIndex + 2 < args.Length && !args[flagIndex + 2].StartsWith("--"))
+            {
+                csvPath = args[flagIndex + 2];
+            }
+            else
+            {
+                csvPath = Path.ChangeExtension(htmlPath, ".csv");
+            }
+
+            Console.WriteLine($"Converting HTML to CSV...");
+            Console.WriteLine($"  Input : {htmlPath}");
+            Console.WriteLine($"  Output: {csvPath}");
+
+            try
+            {
+                int rows = HtmlToCsvConverter.Convert(htmlPath, csvPath);
+                Console.WriteLine($"  Done! {rows} row(s) written to {csvPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ERROR: {ex.Message}");
+            }
+        }
+
         static void PrintHelp()
         {
             Console.WriteLine("Usage: AlexaToExcel [options]");
@@ -160,6 +204,9 @@ namespace AlexaToExcel
             Console.WriteLine("                           Codes: us, ca, uk, de, fr, es, it, au, jp, in, mx, br");
             Console.WriteLine("  -p, --poll-interval <m>  Poll interval in minutes (overrides config.json).");
             Console.WriteLine("                           Use 0 to run once and exit.");
+            Console.WriteLine("  --html-to-csv <file> [out.csv]");
+            Console.WriteLine("                           Parse tables from an HTML file and export to CSV.");
+            Console.WriteLine("                           If output path is omitted, uses the same name with .csv.");
             Console.WriteLine("  --debug                  Show detailed HTTP request/response info.");
             Console.WriteLine("  --help                   Show this help message.");
         }
@@ -537,8 +584,19 @@ namespace AlexaToExcel
                     RawJson    = item.GetRawText()
                 };
 
-                // Time from flat fields
-                ApplyTime(Str(item, "originalTime", "triggerTime", "alarmTime", "scheduledTime"), r);
+                // Time: combine originalDate + originalTime (Alexa's standard split fields)
+                var origDate = Str(item, "originalDate");
+                var origTime = Str(item, "originalTime");
+                if (origDate != null && origTime != null)
+                {
+                    ApplyTime(origDate + "T" + origTime.TrimStart('T'), r);
+                }
+
+                // Fallback to unified timestamp / datetime fields
+                if (!r.TriggerTime.HasValue)
+                {
+                    ApplyTime(Str(item, "triggerTime", "alarmTime", "scheduledTime"), r);
+                }
 
                 // Time from nested trigger object
                 if (!r.TriggerTime.HasValue && item.TryGetProperty("trigger", out var trig))

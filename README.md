@@ -158,3 +158,20 @@ The same cookie authentication gives access to other Alexa data. Planned candida
 - **Shopping list** — items added via voice or the Alexa app (` /api/todos?type=SHOPPING_ITEM `)
 - **To-do list** — tasks created on your Echo devices (` /api/todos?type=TASK `)
 - **Voice history** — a log of everything said to Alexa, with timestamps (` /api/activities `)
+
+# Exporting Google Sheet as CSV from HTML
+
+To add a preview or export a Google Sheet as HTML using URL modifications, you can replace the /edit portion of the spreadsheet URL with specific parameters. 
+
+**URL Transformation Methods**
+
+1- Preview Mode: Replace /edit with /preview.
+2- HTML View: Replace /edit with /htmlview. 
+3- Direct HTML Export: Replace /edit with /export?format=html. 
+
+I tested with /preview and I was able to download it as HTML.
+Then using a command prompt :
+
+```
+AlexaToExcel --html-to-csv "file.html" output.csv
+```
