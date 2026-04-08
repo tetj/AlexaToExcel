@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using System.Drawing;
@@ -7,8 +8,30 @@ namespace AlexaToExcel
 {
     class Program
     {
+        [DllImport("kernel32.dll")]
+        private static extern bool AllocConsole();
+
+        private static bool _consoleAllocated;
+
+        private static void EnsureConsole()
+        {
+            if (!_consoleAllocated)
+            {
+                AllocConsole();
+                _consoleAllocated = true;
+            }
+        }
+
         static async Task Main(string[] args)
         {
+            if (args.Contains("--debug", StringComparer.OrdinalIgnoreCase) ||
+                args.Contains("--help", StringComparer.OrdinalIgnoreCase) ||
+                args.Contains("-h", StringComparer.OrdinalIgnoreCase) ||
+                Array.Exists(args, a => a.Equals("--html-to-csv", StringComparison.OrdinalIgnoreCase)))
+            {
+                EnsureConsole();
+            }
+
             Console.WriteLine("=== Alexa To Excel ===");
             Console.WriteLine();
 
@@ -114,6 +137,7 @@ namespace AlexaToExcel
 
         static string PromptForCookie(AppConfig config)
         {
+            EnsureConsole();
             var host = AlexaReminderService.GetAlexaHost(config.BaseUrl);
             Console.WriteLine($"  1. Open Chrome and make sure you are logged into {config.BaseUrl}");
             Console.WriteLine($"  2. Open this URL in Chrome:");
