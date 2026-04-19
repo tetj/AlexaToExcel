@@ -1,5 +1,6 @@
 using System.Text;
 using HtmlAgilityPack;
+using HtmlDocument = HtmlAgilityPack.HtmlDocument;
 
 namespace AlexaToExcel
 {

@@ -11,7 +11,7 @@ Alexa does not keep the full history, you can only see the last few reminders bu
 
 # How to use
 
-First, see section [How to get your cookie](#how-to-get-your-cookie) below
+On first run, a login window will open automatically — just sign in to your Amazon account and the app takes care of the rest.
 ```
 # Run once for a US account
 AlexaToExcel.exe --country us --poll-interval 0
@@ -64,54 +64,15 @@ Arguments override the corresponding values in `config.json` for that run only �
 
 ## How to get your cookie
 
-The most common cause of 401 errors is copying the cookie from the wrong place. Follow these steps **exactly**:
+You don't need to copy anything manually. The app handles this automatically:
 
-### Step 1 — Open the right URL in Chrome
+1. On first run, if no cookie is configured, a built-in browser window will open.
+2. Sign in to your Amazon account as normal.
+3. Once the app detects your session is ready (it looks for the required `csrf` and `session-id` cookies), the window closes automatically and your credentials are saved to `config.json`.
 
-Open Chrome and navigate to:
-```
-https://alexa.amazon.ca/api/devices-v2/device?raw=false
-```
-(Use `alexa.amazon.com` if you're on a US account — always `alexa.` not `www.`)
+From that point on, the app runs silently in the background using the saved cookie. If your session expires, the login window will appear again automatically.
 
-You should see a JSON response listing your Echo devices. If you see a login page, sign in first then try again.
-
-### Step 2 — Open DevTools Network tab
-
-Press **F12** → click the **Network** tab → press **F5** to reload.
-
-### Step 3 — Find the request
-
-In the Network tab, click the request named **`device`** (it will be the first one after reload).
-
-### Step 4 — Copy the cookie header
-
-- Click the **Headers** sub-tab → scroll to **Request Headers**
-- Find **`cookie:`** (lowercase, not `Cookie:` or `Set-Cookie:`)
-- Click the value to select it, then press **Ctrl+A** to select all and **Ctrl+C** to copy
-
-> ⚠️ Do NOT use the browser console (`document.cookie`) — it cannot read HttpOnly cookies, which are required for authentication. Copy only the value from the Network tab.
-
-### Step 5 — Paste into config.json
-
-Open `config.json` and paste the value as the `CookieString`:
-
-```json
-{
-  "BaseUrl": "https://www.amazon.ca",
-  "CookieString": "session-id=xxx; csrf=1234567890; ubid-acbca=xxx; ...",
-  "OutputPath": "alexa_reminders.xlsx",
-  "PollIntervalMinutes": 60
-}
-```
-
-### Step 6 — Verify csrf is present
-
-Your cookie string **must contain `csrf=`** (a number, like `csrf=1465446206`).  
-If it's missing, do this first:
-1. Go to `https://alexa.amazon.ca/spa/index.html`
-2. Wait for the page to fully load (this sets the csrf cookie)
-3. Then repeat from Step 1
+> ⚠️ If the login window never closes after signing in, it means the `csrf` cookie was not set. Try navigating manually to `https://alexa.amazon.<your-country>/spa/index.html` inside the login window and wait for it to fully load — this triggers the csrf cookie to be set.
 
 ---
 
@@ -134,9 +95,9 @@ This prints:
 
 | Symptom | Fix |
 |---|---|
-| `csrf` shown as `(NOT FOUND)` | Cookie was copied from `www.amazon.ca`, not `alexa.amazon.ca`. Redo Step 1. |
-| `csrf` value looks wrong | Make sure you copied the *value* of the `cookie:` header, not a single cookie. |
-| 401 after working previously | Session expired. Re-copy cookie from browser. |
+| Login window never closes after signing in | `csrf` cookie not set. Navigate to `alexa.amazon.<country>/spa/index.html` inside the window and wait for it to fully load. |
+| 401 after working previously | Session expired. Delete `CookieString` from `config.json` and restart — the login window will appear again. |
+| `csrf` shown as `(NOT FOUND)` in debug output | The saved cookie is stale. Clear `CookieString` in `config.json` and re-login. |
 
 ---
 

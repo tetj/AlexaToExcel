@@ -11,6 +11,12 @@ namespace AlexaToExcel
         [DllImport("kernel32.dll")]
         private static extern bool AllocConsole();
 
+        [DllImport("kernel32.dll")]
+        private static extern bool FreeConsole();
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
+
         private static bool _consoleAllocated;
 
         private static void EnsureConsole()
@@ -22,14 +28,31 @@ namespace AlexaToExcel
             }
         }
 
+        private static void ReleaseConsole()
+        {
+            if (_consoleAllocated)
+            {
+                FreeConsole();
+                _consoleAllocated = false;
+            }
+        }
+
         static async Task Main(string[] args)
         {
-            if (args.Contains("--debug", StringComparer.OrdinalIgnoreCase) ||
-                args.Contains("--help", StringComparer.OrdinalIgnoreCase) ||
-                args.Contains("-h", StringComparer.OrdinalIgnoreCase) ||
-                Array.Exists(args, a => a.Equals("--html-to-csv", StringComparison.OrdinalIgnoreCase)))
+            bool needsConsole = args.Contains("--debug", StringComparer.OrdinalIgnoreCase) ||
+                                args.Contains("--help", StringComparer.OrdinalIgnoreCase) ||
+                                args.Contains("-h", StringComparer.OrdinalIgnoreCase) ||
+                                Array.Exists(args, a => a.Equals("--html-to-csv", StringComparison.OrdinalIgnoreCase));
+
+            if (needsConsole)
             {
                 EnsureConsole();
+            }
+            else
+            {
+                // Detach from any inherited console (e.g. launched from PowerShell/cmd)
+                // so no window is visible during normal background operation.
+                FreeConsole();
             }
 
             Console.WriteLine("=== Alexa To Excel ===");
@@ -62,50 +85,43 @@ namespace AlexaToExcel
             Console.WriteLine($"Alexa host   : {AlexaReminderService.GetAlexaHost(config.BaseUrl)}");
             Console.WriteLine();
 
-            // If no cookie stored, guide user step-by-step
+            // Cookie is required – must be set in config.json
             if (string.IsNullOrWhiteSpace(config.CookieString))
             {
-                Console.WriteLine("No cookie found in config.json.");
-                Console.WriteLine("Follow these steps:");
-                Console.WriteLine();
-                config.CookieString = PromptForCookie(config);
-                config.Save();
-                Console.WriteLine("Cookie saved to config.json.");
-                Console.WriteLine();
+                if (!RunLoginFlow(config))
+                {
+                    return;
+                }
             }
 
             var service = new AlexaReminderService(config, debug);
 
             try
             {
+                //OpenBrowser(config);
                 await RunSync(service, config);
             }
             catch (AuthException)
             {
-                Console.WriteLine();
-                Console.WriteLine("Your session cookie has expired. Please provide a fresh one.");
-                Console.WriteLine();
-                config.CookieString = PromptForCookie(config);
-                config.Save();
-                Console.WriteLine("Cookie saved to config.json.");
-                Console.WriteLine();
+                if (!RunLoginFlow(config))
+                {
+                    return;
+                }
                 service = new AlexaReminderService(config, debug);
-
                 try
                 {
                     await RunSync(service, config);
                 }
-                catch (AuthException ex)
+                catch (AuthException ex2)
                 {
-                    Console.WriteLine($"  AUTH ERROR after retry: {ex.Message}");
-                    Console.WriteLine("The new cookie is also invalid. Please restart and try again.");
+                    MessageBoxW(IntPtr.Zero, $"Still getting 401 after re-login:\n{ex2.Message}", "Alexa Reminder Sync", 0x10);
                     return;
                 }
             }
 
             if (!debug && config.PollIntervalMinutes > 0)
             {
-                Console.WriteLine($"Running every {config.PollIntervalMinutes} min. Press Ctrl+C to stop.");
+                ReleaseConsole();
                 while (true)
                 {
                     await Task.Delay(TimeSpan.FromMinutes(config.PollIntervalMinutes));
@@ -115,13 +131,10 @@ namespace AlexaToExcel
                     }
                     catch (AuthException)
                     {
-                        Console.WriteLine();
-                        Console.WriteLine("Session cookie expired during polling. Please provide a fresh one.");
-                        Console.WriteLine();
-                        config.CookieString = PromptForCookie(config);
-                        config.Save();
-                        Console.WriteLine("Cookie saved to config.json.");
-                        Console.WriteLine();
+                        if (!RunLoginFlow(config))
+                        {
+                            return;
+                        }
                         service = new AlexaReminderService(config, debug);
                     }
                 }
@@ -135,29 +148,38 @@ namespace AlexaToExcel
             }
         }
 
-        static string PromptForCookie(AppConfig config)
+
+        // Returns true if login succeeded and cookies were saved; false if the user cancelled.
+        static bool RunLoginFlow(AppConfig config)
         {
-            EnsureConsole();
-            var host = AlexaReminderService.GetAlexaHost(config.BaseUrl);
-            Console.WriteLine($"  1. Open Chrome and make sure you are logged into {config.BaseUrl}");
-            Console.WriteLine($"  2. Open this URL in Chrome:");
-            Console.WriteLine($"     {host}/api/devices-v2/device?raw=false");
-            Console.WriteLine($"  3. Press F12 to open DevTools → go to the Network tab");
-            Console.WriteLine($"  4. Refresh the page (F5)");
-            Console.WriteLine($"  5. Click the 'device' request in the Network tab");
-            Console.WriteLine($"  6. Click the 'Headers' sub-tab → scroll to 'Request Headers'");
-            Console.WriteLine($"  7. Find 'cookie:' (lowercase) and click its value to select it");
-            Console.WriteLine($"  8. Press Ctrl+A to select all, then Ctrl+C to copy");
-            Console.WriteLine($"  9. Paste it below and press Enter");
-            Console.WriteLine();
-            Console.WriteLine($"  TIP: The cookie string must contain 'csrf=' somewhere in it.");
-            Console.WriteLine($"       If it doesn't, go to {host}/spa/index.html first,");
-            Console.WriteLine($"       then repeat from step 2.");
-            Console.WriteLine();
-            Console.Write("Paste cookie here: ");
-            var raw = Console.ReadLine() ?? "";
-            // Strip surrounding quotes that some browsers add when you copy
-            return raw.Trim().Trim('"');
+            bool success = false;
+
+            var staThread = new Thread(() =>
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+
+                using var form = new LoginForm(config);
+                var result = form.ShowDialog();
+
+                if (result != DialogResult.OK || string.IsNullOrWhiteSpace(form.ExtractedCookie))
+                {
+                    MessageBoxW(IntPtr.Zero, "Login cancelled or cookies not detected. Exiting.", "Alexa Reminder Sync", 0x30);
+                    success = false;
+                }
+                else
+                {
+                    config.CookieString = form.ExtractedCookie;
+                    config.Save();
+                    success = true;
+                }
+            });
+
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.Start();
+            staThread.Join();
+
+            return success;
         }
 
         static async Task RunSync(AlexaReminderService service, AppConfig config)
