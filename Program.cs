@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Runtime.InteropServices;
 using OfficeOpenXml;
@@ -6,6 +7,31 @@ using System.Drawing;
 
 namespace AlexaToExcel
 {
+    // Writes everything sent to Console.Out/Error to a log file next to the exe,
+    // while still forwarding to the original stream (so --debug still shows output).
+    // This is the only way to diagnose what's happening when launched at boot,
+    // since there's no visible console to read.
+    internal sealed class FileTeeWriter : TextWriter
+    {
+        private readonly TextWriter _inner;
+        private readonly string _path;
+        private static readonly object _lock = new();
+        public FileTeeWriter(TextWriter inner, string path) { _inner = inner; _path = path; }
+        public override Encoding Encoding => _inner.Encoding;
+        public override void Write(char value) => Write(value.ToString());
+        public override void Write(string? value) => WriteLine(value ?? "");
+        public override void WriteLine() => WriteLine("");
+        public override void WriteLine(string? value)
+        {
+            var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {value}";
+            try { _inner.WriteLine(value); } catch { }
+            lock (_lock)
+            {
+                try { File.AppendAllText(_path, line + Environment.NewLine); } catch { }
+            }
+        }
+    }
+
     class Program
     {
         [DllImport("kernel32.dll")]
@@ -18,6 +44,7 @@ namespace AlexaToExcel
         private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
 
         private static bool _consoleAllocated;
+        private static readonly string LogPath = Path.Combine(AppContext.BaseDirectory, "alexa.log");
 
         private static void EnsureConsole()
         {
@@ -55,7 +82,31 @@ namespace AlexaToExcel
                 FreeConsole();
             }
 
+            // Tee Console.Out/Error to a log file next to the exe so we can diagnose
+            // boot-time runs that have no visible console.
+            try
+            {
+                Console.SetOut(new FileTeeWriter(Console.Out, LogPath));
+                Console.SetError(new FileTeeWriter(Console.Error, LogPath));
+            }
+            catch { }
+
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                try { File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] UNHANDLED: {e.ExceptionObject}{Environment.NewLine}"); }
+                catch { }
+            };
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                try { File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] UNOBSERVED: {e.Exception}{Environment.NewLine}"); }
+                catch { }
+                e.SetObserved();
+            };
+
             Console.WriteLine("=== Alexa To Excel ===");
+            Console.WriteLine($"  exe dir   : {AppContext.BaseDirectory}");
+            Console.WriteLine($"  cwd       : {Environment.CurrentDirectory}");
+            Console.WriteLine($"  args      : {string.Join(' ', args)}");
             Console.WriteLine();
 
             if (args.Contains("--help", StringComparer.OrdinalIgnoreCase) ||
@@ -99,7 +150,7 @@ namespace AlexaToExcel
             try
             {
                 //OpenBrowser(config);
-                await RunSync(service, config);
+                await RunInitialSyncWithRetry(service, config, debug);
             }
             catch (AuthException)
             {
@@ -136,6 +187,10 @@ namespace AlexaToExcel
                             return;
                         }
                         service = new AlexaReminderService(config, debug);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"  Poll iteration failed, will retry next interval: {ex.GetType().Name}: {ex.Message}");
                     }
                 }
             }
@@ -182,6 +237,37 @@ namespace AlexaToExcel
             return success;
         }
 
+        // Wraps the first sync attempt with retries so transient boot-time failures
+        // (network not ready, DNS not resolved, etc.) don't cause us to silently
+        // wait a full poll interval before trying again. Auth errors are NOT retried
+        // here — they bubble up so the login flow can run.
+        static async Task RunInitialSyncWithRetry(AlexaReminderService service, AppConfig config, bool debug)
+        {
+            int[] delaysSec = { 5, 10, 20, 30, 60, 120 };
+            Exception? last = null;
+            for (int attempt = 0; attempt <= delaysSec.Length; attempt++)
+            {
+                try
+                {
+                    await RunSync(service, config);
+                    return;
+                }
+                catch (AuthException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                    if (attempt == delaysSec.Length) break;
+                    int wait = delaysSec[attempt];
+                    Console.WriteLine($"  Initial sync attempt {attempt + 1} failed ({ex.GetType().Name}: {ex.Message}). Retrying in {wait}s...");
+                    await Task.Delay(TimeSpan.FromSeconds(wait));
+                }
+            }
+            Console.WriteLine($"  Initial sync gave up after retries. Last error: {last?.Message}");
+        }
+
         static async Task RunSync(AlexaReminderService service, AppConfig config)
         {
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Fetching...");
@@ -201,7 +287,9 @@ namespace AlexaToExcel
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  ERROR: {ex.Message}");
+                Console.WriteLine($"  ERROR: {ex.GetType().Name}: {ex.Message}");
+                Console.WriteLine($"  STACK: {ex.StackTrace}");
+                throw;
             }
         }
 
@@ -343,24 +431,42 @@ namespace AlexaToExcel
         public string OutputPath { get; set; } = "alexa_reminders.xlsx";
         public int PollIntervalMinutes { get; set; } = 60;
 
-        private static readonly string ConfigFile = "config.json";
+        // Anchor relative paths to the directory containing the executable so the app
+        // behaves the same regardless of the current working directory (e.g. when
+        // launched at boot from a Startup shortcut/Task Scheduler, where CWD is
+        // typically C:\Windows\System32).
+        private static readonly string BaseDir = AppContext.BaseDirectory;
+        private static readonly string ConfigFile = Path.Combine(BaseDir, "config.json");
 
         public static AppConfig Load()
         {
+            AppConfig cfg;
             if (File.Exists(ConfigFile))
             {
                 try
                 {
                     var json = File.ReadAllText(ConfigFile);
-                    return JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+                    cfg = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Warning: could not parse config.json: {ex.Message}");
+                    cfg = new AppConfig();
                 }
             }
-            var cfg = new AppConfig();
-            cfg.Save();
+            else
+            {
+                cfg = new AppConfig();
+                cfg.Save();
+            }
+
+            // Resolve OutputPath against the executable directory if it is relative
+            // so the xlsx file is always written next to the exe.
+            if (!string.IsNullOrWhiteSpace(cfg.OutputPath) && !Path.IsPathRooted(cfg.OutputPath))
+            {
+                cfg.OutputPath = Path.Combine(BaseDir, cfg.OutputPath);
+            }
+
             return cfg;
         }
 
