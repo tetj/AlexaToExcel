@@ -827,9 +827,16 @@ namespace AlexaToExcel
             int nextRow = (sheet.Dimension?.End.Row ?? 1) + 1;
             int added = 0;
 
-            foreach (var r in incoming)
+            // Order new entries by trigger time ascending so the newest reminders
+            // appear at the bottom of the sheet. Reminders without a trigger time
+            // are treated as oldest and placed first in the appended block.
+            var newEntries = incoming
+                .Where(r => !existingIds.Contains(r.Id))
+                .OrderBy(r => r.TriggerTime ?? DateTime.MinValue)
+                .ToList();
+
+            foreach (var r in newEntries)
             {
-                if (existingIds.Contains(r.Id)) continue;
 
                 sheet.Cells[nextRow, 1].Value = r.Id;
                 sheet.Cells[nextRow, 2].Value = r.Text;
